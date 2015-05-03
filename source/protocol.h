@@ -40,6 +40,7 @@ int ReadHandshake(int socket);
 void ReadStreamedDff(int socket, bool (*recv_callback)(void)); // if the callback returns true, the function will abort streaming
 void ReadCommandEnable(int socket, std::vector<AnalyzedFrameInfo>& analyzed_frames, bool enable);
 void ReadCommandPatch(int socket, std::vector<FifoFrameData>& frames);
-void CheckForNetworkEvents(int server_socket, int client_socket, std::vector<FifoFrameData>& frames, std::vector<AnalyzedFrameInfo>& analyzed_frames);
+void CheckForNetworkEvents(int socket, std::vector<FifoFrameData>& frames, std::vector<AnalyzedFrameInfo>& analyzed_frames);
+void SendData(int socket, uint8_t tag, uint8_t *data, uint32_t size);
 
 #endif // FIFOPLAYER_PROTOCOL_H

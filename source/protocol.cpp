@@ -177,45 +177,11 @@ void ReadCommandPatch(int socket, std::vector<FifoFrameData>& frames)
 }
 
 
-void CheckForNetworkEvents(int server_socket, int client_socket, std::vector<FifoFrameData>& frames, std::vector<AnalyzedFrameInfo>& analyzed_frames)
+void CheckForNetworkEvents(int socket, std::vector<FifoFrameData>& frames, std::vector<AnalyzedFrameInfo>& analyzed_frames)
 {
-#if 0
-	fd_set readset;
-	FD_ZERO(&readset);
-//	FD_SET(server_socket, &readset);
-//	if (client_socket != -1)
-		FD_SET(client_socket, &readset);
-//	int maxfd = std::max(client_socket, server_socket);
-	int maxfd = client_socket;
-
-	struct timeval timeout;
-	timeout.tv_sec = 1;
-	timeout.tv_usec = 0;
-
-	char data[12];
-	int ret = net_select(maxfd+1, &readset, NULL, NULL, &timeout); // TODO: Is this compatible with winsocks?
-
-	if (ret <= 0)
-	{
-		if (ret < 0)
-			printf("select returned %d\n", ret);
-		return;
-	}
-/*	if (FD_ISSET(server_socket, &readset))
-	{
-		int new_socket = net_accept(server_socket, NULL, NULL);
-		if (new_socket < 0)
-		{
-			qDebug() << "accept failed";
-		}
-		else client_socket = new_socket;
-	}*/
-#endif
-
 	struct pollsd fds[2];
 	memset(fds, 0, sizeof(fds));
-//	fds[0].socket = server_socket;
-	fds[0].socket = client_socket;
+	fds[0].socket = socket;
 	fds[0].events = POLLIN;
 	int nfds = 1;
 	int timeout = 1; // TODO: Set to zero
@@ -236,12 +202,12 @@ void CheckForNetworkEvents(int server_socket, int client_socket, std::vector<Fif
 		}
 
 		char cmd;
-		ssize_t numread = net_recv(client_socket, &cmd, 1, 0);
+		ssize_t numread = net_recv(socket, &cmd, 1, 0);
 		printf("Peeked command %d\n", cmd);
 		switch (cmd)
 		{
 			case CMD_HANDSHAKE:
-				if (RET_SUCCESS == ReadHandshake(client_socket))
+				if (RET_SUCCESS == ReadHandshake(socket))
 					printf("Successfully exchanged handshake token!\n");
 				else
 					printf("Failed to exchange handshake token!\n");
@@ -255,11 +221,11 @@ void CheckForNetworkEvents(int server_socket, int client_socket, std::vector<Fif
 
 			case CMD_ENABLE_COMMAND:
 			case CMD_DISABLE_COMMAND:
-				ReadCommandEnable(client_socket, analyzed_frames, (cmd == CMD_ENABLE_COMMAND) ? true : false);
+				ReadCommandEnable(socket, analyzed_frames, (cmd == CMD_ENABLE_COMMAND) ? true : false);
 				break;
 
 			case CMD_PATCH_COMMAND:
-				ReadCommandPatch(client_socket, frames);
+				ReadCommandPatch(socket, frames);
 				break;
 
 			default:
@@ -269,4 +235,21 @@ void CheckForNetworkEvents(int server_socket, int client_socket, std::vector<Fif
 		printf("Looping again\n");
 		timeout = 100;
 	} while (ret > 0);
+}
+
+void SendData(int socket, uint8_t tag, uint8_t *data, uint32_t size) {
+	int32_t remaining = size;
+
+	size = htonl(size);
+	// Header
+	net_write(socket, &tag, 1);
+	net_write(socket, &size, 4);
+
+	// Data
+	while (remaining > 0)
+	{
+		net_write(socket, data, std::min(remaining,dff_stream_chunk_size));
+		data += dff_stream_chunk_size;
+		remaining -= dff_stream_chunk_size;
+	}
 }

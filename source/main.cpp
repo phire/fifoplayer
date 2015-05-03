@@ -198,6 +198,32 @@ void OptimizeFifoData(FifoData& fifo_data)
 	}
 }
 
+void sendEfbToClient(int socket) {
+	// Just access the efb directly and send it to the client
+
+	uint32_t *efb_color = (uint32_t*)0xc8000000;
+	uint32_t *efb_depth = (uint32_t*)0xc8400000;
+
+	// Colour buffer
+	uint32_t *buffer = (uint32_t*) malloc(640*528*4);
+	for(int y = 0; y < 528; y++) {
+		for(int x = 0; x < 640; x++) {
+			buffer[y*640+x] = efb_color[(y << 10) | x];
+		}
+	}
+	SendData(socket, 0xc0, (uint8_t*)buffer, 640*528*4);
+
+	// Depth buffer
+	for(int y = 0; y < 528; y++) {
+		for(int x = 0; x < 640; x++) {
+			buffer[y*640+x] = efb_depth[(y << 10) | x];
+		}
+	}
+	SendData(socket, 0xde, (uint8_t*)buffer, 640*528*4);
+
+	free(buffer);
+}
+
 #define DFF_FILENAME "sd:/dff/test.dff"
 
 #define DEFAULT_FIFO_SIZE   (256*1024)
@@ -235,7 +261,7 @@ void Init()
 	GX_Init(gp_fifo,DEFAULT_FIFO_SIZE);
 
 #if ENABLE_CONSOLE==1
-    console_init(frameBuffer[0],20,20,rmode->fbWidth,rmode->xfbHeight,rmode->fbWidth*VI_DISPLAY_PIX_SZ);
+	console_init(frameBuffer[0],20,20,rmode->fbWidth,rmode->xfbHeight,rmode->fbWidth*VI_DISPLAY_PIX_SZ);
 #endif
 
 	WPAD_Init();
@@ -298,7 +324,7 @@ int main()
 	int cur_frame = first_frame;
 	while (processing)
 	{
-		CheckForNetworkEvents(server_socket, client_socket, fifo_data.frames, analyzed_frames);
+		CheckForNetworkEvents(client_socket, fifo_data.frames, analyzed_frames);
 
 		FifoFrameData& cur_frame_data = fifo_data.frames[cur_frame];
 		AnalyzedFrameInfo& cur_analyzed_frame = analyzed_frames[cur_frame];
@@ -416,6 +442,8 @@ int main()
 					}
 					else if (cmd_data[1] == BPMEM_TRIGGER_EFB_COPY)
 					{
+						sendEfbToClient(client_socket);
+
 						u32 tempval = /*be32toh*/(*(u32*)&cmd_data[1]);
 						UPE_Copy* copy = (UPE_Copy*)&tempval;
 

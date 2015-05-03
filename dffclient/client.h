@@ -102,6 +102,9 @@ public slots:
 	void OnConnected();
 	void OnSocketError();
 
+	void OnSocketData();
+	void OnFinishRecv();
+
 	void OnSelectDff();
 	void OnLoadDff();
 
@@ -114,6 +117,8 @@ signals:
 	void HideProgressBar();
 	void SetProgressBarMax(int max);
 	void SetProgressBarValue(int value);
+
+	void CommandReceived(QTcpSocket *socket, u8 command);
 
 private:
 	QTcpSocket* client;

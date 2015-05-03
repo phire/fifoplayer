@@ -23,6 +23,7 @@
 #include "../source/FifoDataFile.h"
 #include "../source/FifoAnalyzer.h"
 #include "command_info.h"
+#include "efb_viewer.h"
 
 QTcpSocket *client_socket = NULL; // TODO: Remove this
 
@@ -449,6 +450,7 @@ ServerWidget::ServerWidget() : QWidget()
 	client_socket = client;
 	connect(client, SIGNAL(connected()), this, SLOT(OnConnected()));
 	connect(client, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(OnSocketError()));
+	connect(client, SIGNAL(readyRead()), this, SLOT(OnSocketData()));
 
 	hostname = new QLineEdit("127.0.0.1");
 	QPushButton* try_connect = new QPushButton(tr("Connect"));
@@ -509,12 +511,17 @@ ServerWidget::ServerWidget() : QWidget()
 	QPushButton* optimize_fifostream_button = new QPushButton(tr("Optimize FIFO Stream"));
 	connect(optimize_fifostream_button, SIGNAL(clicked()), dff_model, SLOT(Optimize()));
 
-	QVBoxLayout* main_layout = new QVBoxLayout;
+	EFBViewer* efb_viewer = new EFBViewer;
+	connect(this, SIGNAL(CommandReceived(QTcpSocket*,u8)), efb_viewer, SLOT(StartDataReceive(QTcpSocket*,u8)));
+	connect(efb_viewer, SIGNAL(ReceiveFinished()), this, SLOT(OnFinishRecv()));
+
+	QHBoxLayout* main_layout = new QHBoxLayout;
+	QVBoxLayout* left_layout = new QVBoxLayout;
 	{
 		QHBoxLayout* layout = new QHBoxLayout;
 		layout->addWidget(hostname);
 		layout->addWidget(try_connect);
-		main_layout->addLayout(layout);
+		left_layout->addLayout(layout);
 	}
 	{
 		QHBoxLayout* layout = new QHBoxLayout;
@@ -522,38 +529,41 @@ ServerWidget::ServerWidget() : QWidget()
 		layout->addWidget(dffpath);
 		layout->addWidget(openDffFile);
 		layout->addWidget(loadDffFile);
-		main_layout->addLayout(layout);
+		left_layout->addLayout(layout);
 	}
 	{
-		main_layout->addWidget(progress_bar);
+		left_layout->addWidget(progress_bar);
 	}
 	{
 		QHBoxLayout* layout = new QHBoxLayout;
 		layout->addWidget(expand_all_button);
 		layout->addWidget(collapse_all_button);
-		main_layout->addLayout(layout);
+		left_layout->addLayout(layout);
 	}
 	{
-		main_layout->addWidget(dff_view);
+		left_layout->addWidget(dff_view);
 	}
 	{
-		main_layout->addLayout(command_description);
+		left_layout->addLayout(command_description);
 	}
 	{
 		QHBoxLayout* layout = new QHBoxLayout;
 		layout->addWidget(enable_command_button);
 		layout->addWidget(disable_command_button);
-		main_layout->addLayout(layout);
+		left_layout->addLayout(layout);
 	}
 	{
 		QHBoxLayout* layout = new QHBoxLayout;
 		layout->addWidget(enable_geometry_button);
 		layout->addWidget(disable_geometry_button);
-		main_layout->addLayout(layout);
+		left_layout->addLayout(layout);
 	}
 	{
-		main_layout->addWidget(optimize_fifostream_button);
+		left_layout->addWidget(optimize_fifostream_button);
 	}
+	main_layout->addLayout(left_layout);
+
+	main_layout->addLayout(efb_viewer);
 	setLayout(main_layout);
 }
 
@@ -627,6 +637,24 @@ void ServerWidget::OnConnected()
 void ServerWidget::OnSocketError()
 {
 	qDebug() << client->errorString();
+}
+
+void ServerWidget::OnSocketData()
+{
+	u8 cmd;
+	client->read((char*)&cmd, sizeof(cmd));
+
+	qDebug() << "Receved command " << cmd;
+
+	disconnect(client, SIGNAL(readyRead()), this, SLOT(OnSocketData()));
+	emit CommandReceived(client, cmd);
+}
+
+void ServerWidget::OnFinishRecv()
+{
+	connect(client, SIGNAL(readyRead()), this, SLOT(OnSocketData()));
+	if(client->bytesAvailable() > 0)
+		OnSocketData();
 }
 
 void ServerWidget::OnSetProgress(int current, int max)
